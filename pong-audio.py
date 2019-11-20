@@ -44,6 +44,9 @@ import wave
 quit = False
 debug = 1
 
+lock = threading.Lock()
+distance = 0
+
 # pitch & volume detection
 # -------------------------------------#
 # PyAudio object.
@@ -60,12 +63,18 @@ pDetection.set_unit("Hz")
 pDetection.set_silence(-40)
 # -------------------------------------#
 
+# output stream
+#---------------------------------------#
+out_stream = p.open(format=pyaudio.paFloat32,
+                channels=1,
+                rate=44100,
+                output=True)
+
+
 # keeping score of points:
 p1_score = 0
 p2_score = 0
 
-# pitch global
-# PITCH = 261
 
 #play some fun sounds?
 def hit():
@@ -119,8 +128,40 @@ def sense_microphone():
         #print("p"+str(pitch))
         # print("v"+str(volume))
         PITCH = pitch
-        print(str(PITCH))
+        # print(str(PITCH))
 # -------------------------------------#
+
+# output
+def output_sound():
+    global quit, distance
+    while not quit:
+
+        #print(str(dist))
+        lock.acquire()
+        print('output_sound has lock', distance)
+        pitch = mapping(distance, -450, 450, 100, 420)
+        lock.release()
+
+        volume = 0.5
+        fs = 44100
+        duration = 1.0
+
+        samples = (num.sin(2*num.pi*num.arange(fs*duration)*pitch/fs)).astype(num.float32)
+
+        out_stream.write(volume*samples)
+# --------------------------------------#
+
+
+# helper fxns
+def mapping(value, leftMin, leftMax, rightMin, rightMax):
+        leftSpan = leftMax - leftMin
+        rightSpan = rightMax - rightMin
+
+        valueScaled = float(value - leftMin) / float(leftSpan)
+
+        return rightMin + (valueScaled*rightSpan)
+
+# --------------------#
 
 class Ball(object):
 
@@ -247,6 +288,7 @@ class Model(object):
 
 # -------------- Ball position: you can find it here -------
     def update_ball(self):
+        global distance
         """
             Update ball position with post-collision detection.
             I.e. Let the ball move out of bounds and calculate
@@ -260,6 +302,14 @@ class Model(object):
         b.x_old, b.y_old = b.x, b.y
         b.x += b.vec_x * self.ball_speed 
         b.y += b.vec_y * self.ball_speed
+        # play sound to reflect distance of ball from p1 paddle
+        p0 = self.players[0]
+
+        lock.acquire()
+        distance = (p0.y - b.y)
+        print('update_ball set distance to: ', str(distance))
+        lock.release()
+
         self.check_if_oob_top_bottom()  # oob: out of bounds
         self.check_if_oob_sides()
         self.check_if_paddled()
@@ -419,6 +469,10 @@ speech_thread.start()
 microphone_thread = threading.Thread(target=sense_microphone, args=())
 microphone_thread.start()
 # -------------------------------------#
+
+sound_thread = threading.Thread(target=output_sound, args=())
+sound_thread.start()
+
 
 if debug: print("init window...")
 if debug: print("done! init app...")
