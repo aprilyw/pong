@@ -47,6 +47,9 @@ debug = 1
 lock = threading.Lock()
 distance = 0
 
+x_lock = threading.Lock()
+x_distance = 0
+
 # pitch & volume detection
 # -------------------------------------#
 # PyAudio object.
@@ -76,18 +79,20 @@ p1_score = 0
 p2_score = 0
 
 
-#play some fun sounds?
+# sound functions
 def hit():
     playsound('hit.wav', False)
+def miss():
+    playsound('inconceivable.wav', False)
 
-hit()
 # speech recognition functions using google api
 # -------------------------------------#
 def listen_to_speech():
-    global quit
+    global quit, command
     while not quit:
         # obtain audio from the microphone
         r = sr.Recognizer()
+        command = ""
         with sr.Microphone() as source:
             print("[speech recognition] Say something!")
             audio = r.listen(source)
@@ -98,9 +103,16 @@ def listen_to_speech():
             # instead of `r.recognize_google(audio)`
             recog_results = r.recognize_google(audio)
             print("[speech recognition] Google Speech Recognition thinks you said \"" + recog_results + "\"")
+            
+            # set global
+            if recog_results == "up" or recog_results =="down":
+                command = recog_results
+
             # if recognizing quit and exit then exit the program
             if recog_results == "quit" or recog_results == "exit":
                 quit = True
+
+
         except sr.UnknownValueError:
             print("[speech recognition] Google Speech Recognition could not understand audio")
         except sr.RequestError as e:
@@ -133,22 +145,29 @@ def sense_microphone():
 
 # output
 def output_sound():
-    global quit, distance
+    global quit, distance, x_distance
     while not quit:
 
         #print(str(dist))
         lock.acquire()
-        print('output_sound has lock', distance)
+        #print('output_sound has lock', distance)
         pitch = mapping(distance, -450, 450, 100, 420)
         lock.release()
 
-        volume = 0.5
+        x_lock.acquire()
+        volume = mapping(800 - x_distance, 0, 800, 0, 0.5)
+        print('(output_sound) volume: ', volume)
+        x_lock.release()
+
+        #volume = 0.5
         fs = 44100
         duration = 1.0
 
         samples = (num.sin(2*num.pi*num.arange(fs*duration)*pitch/fs)).astype(num.float32)
 
-        out_stream.write(volume*samples)
+        # if ball is within 5 of paddle's y pos
+        if (abs(distance) > 5):
+            out_stream.write(volume*samples)
 # --------------------------------------#
 
 
@@ -250,9 +269,11 @@ class Model(object):
         """Called by update_ball to reset a ball left/right of the screen."""
         b = self.ball
         if b.x + b.TO_SIDE < 0:  # leave on left
+            miss() # play miss sound
             self.reset_ball(1)
             p2_score+=1
         elif b.x - b.TO_SIDE > self.WIDTH:  # leave on right
+            miss() # play miss sound
             p1_score+=1
             self.reset_ball(0)
 
@@ -288,7 +309,7 @@ class Model(object):
 
 # -------------- Ball position: you can find it here -------
     def update_ball(self):
-        global distance
+        global distance, x_distance
         """
             Update ball position with post-collision detection.
             I.e. Let the ball move out of bounds and calculate
@@ -307,8 +328,11 @@ class Model(object):
 
         lock.acquire()
         distance = (p0.y - b.y)
-        print('update_ball set distance to: ', str(distance))
         lock.release()
+
+        x_lock.acquire()
+        x_distance = (b.x - p0.x)
+        x_lock.release()
 
         self.check_if_oob_top_bottom()  # oob: out of bounds
         self.check_if_oob_sides()
@@ -333,14 +357,6 @@ class Model(object):
         p1.last_movements.pop(0)
 
 
-        # get pitch
-        #data = stream.read(1024,exception_on_overflow=False)
-        # samples = num.fromstring(data,
-        #     dtype=aubio.float_type)
-
-        # # Compute the pitch of the microphone input
-        # pitch = pDetection(samples)[0]
-
         if (PITCH > 261) and (p1.y > 0): #change this to voice input
             p1.y -= self.speed
             p1.last_movements.append(-self.speed)
@@ -351,6 +367,17 @@ class Model(object):
             # notice how we popped from _place_ zero,
             # but append _a number_ zero here. it's not the same.
             p1.last_movements.append(0)
+
+        # if (command == "up") and (p1.y > 0): #change this to voice input
+        #     p1.y -= self.speed
+        #     p1.last_movements.append(-self.speed)
+        # elif (command == "down") and (p1.y < 450): #change this to voice input
+        #     p1.y += self.speed
+        #     p1.last_movements.append(+self.speed)
+        # else:
+        #     # notice how we popped from _place_ zero,
+        #     # but append _a number_ zero here. it's not the same.
+        #     p1.last_movements.append(0)
            
         # ----------------- DO NOT CHANGE BELOW ----------------
         # player 2: the other user controls the right player by O/L
