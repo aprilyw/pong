@@ -367,17 +367,6 @@ class Model(object):
             # notice how we popped from _place_ zero,
             # but append _a number_ zero here. it's not the same.
             p1.last_movements.append(0)
-
-        # if (command == "up") and (p1.y > 0): #change this to voice input
-        #     p1.y -= self.speed
-        #     p1.last_movements.append(-self.speed)
-        # elif (command == "down") and (p1.y < 450): #change this to voice input
-        #     p1.y += self.speed
-        #     p1.last_movements.append(+self.speed)
-        # else:
-        #     # notice how we popped from _place_ zero,
-        #     # but append _a number_ zero here. it's not the same.
-        #     p1.last_movements.append(0)
            
         # ----------------- DO NOT CHANGE BELOW ----------------
         # player 2: the other user controls the right player by O/L
